@@ -41,6 +41,17 @@ public class Receiver {
                 break; //handshake done
             }
         }
+
+        // DATA Transfer
+        byte[][] buffer = new byte[128][]; // sets buffers
+        boolean[] buffered = new boolean[128]; // checks if free
+
+        int expectedSeq = 1;
+        int lastAcked = 0;
+
+        FileOutputStream fos = new FileOutputStream(outputFile);
+        boolean done = false;
+        
     }
 
 }
