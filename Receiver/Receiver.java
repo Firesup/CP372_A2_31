@@ -33,7 +33,7 @@ public class Receiver {
                 System.out.println("[RCV] SOT SEQ=0");
                 ackCount++;
                 if (!ChaosEngine.shouldDrop(ackCount, rn)) {
-                    //sendACK(socket, senderAddy, senderAckPort, 0);
+                    //sendACK
                     System.out.println("[ACK] Sent ACK SEQ=0 (SOT)");
                 } else {
                     System.out.println("[DROP] ACK SEQ=0 (SOT) intentionally dropped (ackCount=" + ackCount + ")");
