@@ -24,5 +24,23 @@ public class Receiver {
 
         System.out.println("[RECEIVER] Listening on port " + rcvDataPort);
         System.out.println("[RECEIVER] Will send ACK to " + senderIP + ": " + senderAckPort);
+
+        // HANDSHAKE (wait for SOT type=0, seq=0)
+        while(true) {
+            socket.receive(dp);
+            DSPacket pkt = new DSPacket(rawBuf);
+            if (pkt.getType() == DSPacket.TYPE_SOT && pkt.getSeqNum() == 0) {
+                System.out.println("[RCV] SOT SEQ=0");
+                ackCount++;
+                if (!ChaosEngine.shouldDrop(ackCount, rn)) {
+                    //sendACK(socket, senderAddy, senderAckPort, 0);
+                    System.out.println("[ACK] Sent ACK SEQ=0 (SOT)");
+                } else {
+                    System.out.println("[DROP] ACK SEQ=0 (SOT) intentionally dropped (ackCount=" + ackCount + ")");
+                }
+                break; //handshake done
+            }
+        }
     }
+
 }
