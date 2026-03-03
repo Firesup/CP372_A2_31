@@ -51,6 +51,7 @@ public class Sender {
         System.out.println("[SENDER] File size: " + fileData.length + "bytes -> " + total
                             + " DATA Packets, EOT seq= " + eotSeq);
 
+        //Handshake SOT (Seq=0) -> wait for ACK = 0
         DSPacket sotPacket = new DSPacket(DSPacket.TYPE_SOT, 0, null);
         sendPacket(socket, sotPacket, rcvAddress, rcvDataPort);
         long startTime = System.currentTimeMillis();
@@ -60,13 +61,150 @@ public class Sender {
         while (!handshakeDone) {
             try {
                 DSPacket ack = receivePacket(socket);
-                
+                if (ack.getType() == DSPacket.TYPE_ACK && ack.getSeqNum() == 0) {
+                    System.out.println("[ACK] Handshake ACK Seq=0 - Connection Established");
+                    handshakeDone = true;
+                }
+            } catch (SocketTimeoutException e) {
+                sotTimeouts++;
+                if (sotTimeouts >= MAX_TIMEOUTS) critFailure(socket);
+                System.out.println("[TIMEOUT] SOT timeout #" + sotTimeouts + " - retransmitting");
+                sendPacket(socket, sotPacket, rcvAddress, senderAckPort);  
+            }
+            }
+
+            //DATA TRANSFER (passed to S&W OR GBN)
+            if (!isGBN) {
+                transferStopAndWait(socket, dataPackets, rcvAddress, rcvDataPort);
+            } else {
+                transferGoBackN(socket, dataPackets, rcvAddress, rcvDataPort, windowSize);
+            }
+
+            // Teardown: EOT wait for ACK eotseq
+            DSPacket eotPacket = new DSPacket(DSPacket.TYPE_EOT, eotSeq, null);
+            sendPacket(socket, eotPacket, rcvAddress, senderAckPort);
+            System.out.println("[SEND] EOT Seq= " + eotSeq);
+            int eotTimeouts = 0;
+            boolean eotDone = false;
+            while (!eotDone) {
+                try {
+                    DSPacket ack = receivePacket(socket);
+                    if (ack.getType() == DSPacket.TYPE_ACK && ack.getSeqNum() == eotSeq) {
+                        System.out.println("[ACK] EOT ACK Seq= " + " Teardown complete");
+                        eotDone = true;
+                    }
+                } catch (SocketTimeoutException e) {
+                    eotTimeouts++;
+                    if (eotTimeouts >= MAX_TIMEOUTS) critFailure(socket);
+                    System.out.println("[TIMEOUT] EOT timeout #" + eotTimeouts + " Retransmitting EOT");
+                    sendPacket(socket, eotPacket, rcvAddress, senderAckPort);
+                }
+            }
+            long endTime = System.currentTimeMillis();
+            double timeElapsed = (endTime - startTime) / 1000;
+            System.out.printf("Total Transmission Time: %.2f seconds%n", timeElapsed);
+            socket.close();
+        }
+
+        //Stop & Wait RDT
+        // wait for packet ACK before sending next
+        private static void transferStopAndWait(DatagramSocket socket, List<DSPacket> packets, InetAddress rcvAddress, int rcvDataPort) throws Exception {
+            System.out.println("\n[S&W] Stop And Wait Transfer beginning");
+            for (DSPacket pkt : packets) {
+                int expectedAck = pkt.getSeqNum();
+                int timeoutCount = 0;
+                boolean acked = false;
+
+                sendPacket(socket, pkt, rcvAddress, rcvDataPort);
+                System.out.println("[S&W][SEND] DATA Seq= " + expectedAck);
+                while (!acked) {
+                    try {
+                        DSPacket ack = receivePacket(socket);
+                        if (ack.getType() == DSPacket.TYPE_ACK && ack.getSeqNum() == expectedAck) {
+                            System.out.println("[S&W][ACK] ACK Seq= " + expectedAck);
+                            timeoutCount = 0;
+                            acked = true;
+                        } else {
+                            System.out.println("[S&W][  ] Wrong ACK Seq= " + ack.getSeqNum() + " (Expected " + expectedAck + "), ignored");
+                        }
+                    } catch (SocketTimeoutException e) {
+                        System.out.println("[S&W][TIMEOUT] Seq=" + expectedAck + " timeout #" + timeoutCount + " Retransmitting");
+                        sendPacket(socket, pkt, rcvAddress, rcvDataPort);
+                    }
+                }
+            }
+            System.out.println("[S&W] Stop And Wait Transfer Complete \n");
+        }
+
+        // GO-BACK-N (GBN)
+        // packets sent in window size n
+        private static void transferGoBackN(DatagramSocket socket, List<DSPacket> packets, InetAddress rcvAddress, int rcvDataPort, int N) throws exception {
+            int total = packets.size();
+            if (total == 0) return;
+            System.out.println("\n[GBN] Go Back N transfer beginning (N=" + N + ")");
+            int base = 0;
+            int nextToSend = 0;
+            int timeoutCount= 0;
+            while (base < total) {
+                while (nextToSend < total && nextToSend < base + N) {
+                    int avail = Math.min(base + N, total) - nextToSend;
+                    int groupSize = Math.min(4, avail);
+                    List<DSPacket> group = new ArrayList<>(groupSize);
+                    for (int i = 0; i < groupSize; i++) {
+                        group.add(packets.get(nextToSend + i));
+                    }
+                    List<DSPacket> toSend = ChaosEngine.permutePackets(group);
+                    for (DSPacket p : toSend) {
+                        sendPacket(socket, p, rcvAddress, rcvDataPort);
+                        System.out.println("[GBN][SEND] DATA Seq= " + p.getSeqNum() + " [base=" + base + 
+                                                                                      " next=" + (nextToSend + groupSize) +
+                                                                                      " win=" + N + "]");
+                    }
+                    nextToSend += groupSize;
+                }
+
+                // wait for cumulative ack
+                try {
+                    DSPacket ack = receivePacket(socket);
+                    if (ack.getType() == DSPacket.TYPE_ACK) {
+                        int ackSeq = ack.getSeqNum();
+                        int newBase = advanceBase(base, nextToSend, packets, ackSeq);
+                        
+                        if (newBase > base) {
+                            System.out.println("[GBN][ACK] Cumulative ACK Seq= " + ackSeq + " base " + base + " -> " + newBase);
+                            base = newBase;
+                            timeoutCount = 0;
+                        } else {
+                            System.out.println("[GBN][   ] ACK Seq= "  + ackSeq + "does not advance window (base= " + base + ")");
+
+                        }
+                    }
+                } catch (SocketTimeoutException e) {
+                    timeoutCount++;
+                    System.out.println("[GBN][TIMEOUT] Timeout #" + timeoutCount + " for base packet Seq= " + packets.get(base).getSeqNum());
+                    if (timeoutCount >= MAX_TIMEOUTS) critFailure(socket);
+                    System.out.println("[GBN][RETX] Retransmitting window [" + base + ", " + nextToSend + ")");
+
+                    for (int i = base; i < nextToSend; i++) {
+                        sendPacket(socket, null, rcvAddress, rcvDataPort);
+                        System.out.println("[GBN][RETX] DATA Seq= " + packets.get(i).getSeqNum());
+
+                    }
+                }
+            }
+            System.out.println("[GBN] Go Back N Transfer Complete");
+        }
+
+    //advanceBase past all packets covered by cumulative ACK
+    //searches backwards from nextToSend, finding latest occurrance of ackSeq
+    private static int advanceBase(int base, int nextToSend, List<DSPacket> packets, int ackSeq) {
+        for (int i = nextToSend - 1; i >= base, i--) {
+            if (packets.get(i).getSeqNum() == ackSeq) {
+                return i + 1;
             }
         }
-      }
-
-
-
+        return base; 
+    }
 
 
     //Util methods
@@ -113,7 +251,7 @@ public class Sender {
         return new DSPacket(buf);
     }
 
-    private static void criticalFailure(DatagramSocket socket) {
+    private static void critFailure(DatagramSocket socket) {
         System.out.println("Unable to transfer file.");
         socket.close();
         System.exit(1);
