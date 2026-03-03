@@ -138,7 +138,7 @@ public class Sender {
 
         // GO-BACK-N (GBN)
         // packets sent in window size n
-        private static void transferGoBackN(DatagramSocket socket, List<DSPacket> packets, InetAddress rcvAddress, int rcvDataPort, int N) throws exception {
+        private static void transferGoBackN(DatagramSocket socket, List<DSPacket> packets, InetAddress rcvAddress, int rcvDataPort, int N) throws Exception {
             int total = packets.size();
             if (total == 0) return;
             System.out.println("\n[GBN] Go Back N transfer beginning (N=" + N + ")");
@@ -198,7 +198,7 @@ public class Sender {
     //advanceBase past all packets covered by cumulative ACK
     //searches backwards from nextToSend, finding latest occurrance of ackSeq
     private static int advanceBase(int base, int nextToSend, List<DSPacket> packets, int ackSeq) {
-        for (int i = nextToSend - 1; i >= base, i--) {
+        for (int i = nextToSend - 1; i >= base; i--) {
             if (packets.get(i).getSeqNum() == ackSeq) {
                 return i + 1;
             }
