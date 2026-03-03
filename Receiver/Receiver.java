@@ -52,6 +52,76 @@ public class Receiver {
         FileOutputStream fos = new FileOutputStream(outputFile);
         boolean done = false;
         
+        while(!done) {
+            DSPacket pkt = receivePacket(socket);
+            byte type = pkt.getType();
+            int seq = pkt.getSeqNum();
+
+            if (type == DSPacket.TYPE_EOT) {
+                System.out.println("[RCV] DATA Seq= " + seq + "len= " + pkt.getLength() + "Expect Seq= " + expectedSeq + ")");
+                if (seq == expectedSeq) {
+                    buffer[seq] = pkt.getPayload();
+                    occupied[seq] = true;
+
+                    while (occupied[expectedSeq]) {
+                        fos.write(buffer[expectedSeq]);
+                        System.out.println("[WRITE] Delivered Seq= " + expectedSeq);
+                        occupied[expectedSeq] = false;
+                        buffer[expectedSeq] = null;
+                        lastAcked = expectedSeq;
+                        expectedSeq = (expectedSeq + 1) % 128;
+                    }
+                    ackCount++;
+                    sendAck(Socket, senderAddy, senderAckPort, lastAcked, ackCount, rn);
+
+                } else if (isAhead(seq, expectedSeq)) {
+                    if (!occupied[seq]) {
+                        buffer[seq] = pkt.getPayload();
+                        occupied[seq] = true;
+                        System.out.println("[BUF] Buffered out of order Seq= " + seq);
+                    }
+                    ackCount++;
+                    sendAck(socket, senderAddress, senderAckPort, lastAcked, ackCount, rn);
+                } else {
+                    System.out.println("[DISC] Seq= " + seq + "is below window (expected= " + expectedSeq + ") Re-ACKing lastAcked= " + lastAcked);
+                    ackCount++;
+                    sendAck(socket, senderAddy, senderAckPort, lastAcked, ackCount, rn);
+
+                }
+
+            } else {
+                System.out.println("[IGNORE] Unexpected type= " + type + " Seq= " + seq);
+            }
+        }
+        //teardown and close socket
+        fos.close();
+        socket.close();
+        System.out.println("[DONE] Output file saved: " + outputFile);
     }
 
+    
+    // Sends a TYPE_ACK packet with the given sequence number
+    private static void sendAck(DatagramSocket socket, InetAddress addr, int port, int seq, int ackCount, int rn) throws Exception {
+        if (ChaosEngine.shouldDrop(ackCount, rn)) {
+            System.out.println("[DROP] ACK Seq= " + seq + " intentionally dropped (ackCount= " + ackCount + ", RN= " + rn + ")");
+            return;
+        }
+        DSPacket       ack  = new DSPacket(DSPacket.TYPE_ACK, seq, null);
+        byte[]         data = ack.toBytes();
+        DatagramPacket dp   = new DatagramPacket(data, data.length, addr, port);
+        socket.send(dp);
+        System.out.println("[ACK] Sent ACK Seq= " + seq + "  (ackCount= " + ackCount + ")");
+    }
+
+
+    private static DSPacket receivePacket(DatagramSocket socket) throws Exception {
+        byte[]         buf = new byte[DSPacket.MAX_PACKET_SIZE];
+        DatagramPacket dp  = new DatagramPacket(buf, buf.length);
+        socket.receive(dp);
+        return new DSPacket(buf);
+    }
+
+    private static boolean isAhead(int seq, int expected) {
+        return ((seq - expected + 128) % 128) > 0;
+    }
 }
