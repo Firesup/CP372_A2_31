@@ -55,7 +55,7 @@ public class Sender {
         DSPacket sotPacket = new DSPacket(DSPacket.TYPE_SOT, 0, null);
         sendPacket(socket, sotPacket, rcvAddress, rcvDataPort);
         long startTime = System.currentTimeMillis();
-        System.out.println("[SEND] SOT Seq=0");
+        System.out.println("[SEND] SOT Seq= 0");
         int sotTimeouts = 0;
         boolean handshakeDone = false;
         while (!handshakeDone) {
@@ -69,7 +69,7 @@ public class Sender {
                 sotTimeouts++;
                 if (sotTimeouts >= MAX_TIMEOUTS) critFailure(socket);
                 System.out.println("[TIMEOUT] SOT timeout #" + sotTimeouts + " - retransmitting");
-                sendPacket(socket, sotPacket, rcvAddress, senderAckPort);  
+                sendPacket(socket, sotPacket, rcvAddress, rcvDataPort);
             }
             }
 
@@ -82,7 +82,7 @@ public class Sender {
 
             // Teardown: EOT wait for ACK eotseq
             DSPacket eotPacket = new DSPacket(DSPacket.TYPE_EOT, eotSeq, null);
-            sendPacket(socket, eotPacket, rcvAddress, senderAckPort);
+            sendPacket(socket, eotPacket, rcvAddress, rcvDataPort);
             System.out.println("[SEND] EOT Seq= " + eotSeq);
             int eotTimeouts = 0;
             boolean eotDone = false;
@@ -128,6 +128,8 @@ public class Sender {
                             System.out.println("[S&W][  ] Wrong ACK Seq= " + ack.getSeqNum() + " (Expected " + expectedAck + "), ignored");
                         }
                     } catch (SocketTimeoutException e) {
+                        timeoutCount++;
+                        if (timeoutCount >= MAX_TIMEOUTS) critFailure((socket));
                         System.out.println("[S&W][TIMEOUT] Seq=" + expectedAck + " timeout #" + timeoutCount + " Retransmitting");
                         sendPacket(socket, pkt, rcvAddress, rcvDataPort);
                     }
@@ -186,7 +188,7 @@ public class Sender {
                     System.out.println("[GBN][RETX] Retransmitting window [" + base + ", " + nextToSend + ")");
 
                     for (int i = base; i < nextToSend; i++) {
-                        sendPacket(socket, null, rcvAddress, rcvDataPort);
+                        sendPacket(socket, packets.get(i), rcvAddress, rcvDataPort);
                         System.out.println("[GBN][RETX] DATA Seq= " + packets.get(i).getSeqNum());
 
                     }
