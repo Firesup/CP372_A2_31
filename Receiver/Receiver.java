@@ -44,7 +44,7 @@ public class Receiver {
 
         // DATA Transfer
         byte[][] buffer = new byte[128][]; // sets buffers
-        boolean[] buffered = new boolean[128]; // checks if free
+        boolean[] occupied = new boolean[128]; // checks if free
 
         int expectedSeq = 1;
         int lastAcked = 0;
@@ -72,7 +72,7 @@ public class Receiver {
                         expectedSeq = (expectedSeq + 1) % 128;
                     }
                     ackCount++;
-                    sendAck(Socket, senderAddy, senderAckPort, lastAcked, ackCount, rn);
+                    sendAck(socket, senderAddy, senderAckPort, lastAcked, ackCount, rn);
 
                 } else if (isAhead(seq, expectedSeq)) {
                     if (!occupied[seq]) {
@@ -81,7 +81,7 @@ public class Receiver {
                         System.out.println("[BUF] Buffered out of order Seq= " + seq);
                     }
                     ackCount++;
-                    sendAck(socket, senderAddress, senderAckPort, lastAcked, ackCount, rn);
+                    sendAck(socket, senderAddy, senderAckPort, lastAcked, ackCount, rn);
                 } else {
                     System.out.println("[DISC] Seq= " + seq + "is below window (expected= " + expectedSeq + ") Re-ACKing lastAcked= " + lastAcked);
                     ackCount++;

@@ -1,0 +1,16 @@
+To Compile:
+
+cd Sender && javac *.java
+
+cd Receiver && javac *.java
+
+
+java Receiver 127.0.0.1 9001 9000 output.txt 0
+
+# S&W:
+java Sender 127.0.0.1 9000 9001 input.txt 1000
+# GBN:
+java Sender 127.0.0.1 9000 9001 input.txt 1000 20
+
+verify transfer with receiver terminal:
+diff input.txt output.txt
