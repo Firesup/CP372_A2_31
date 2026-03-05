@@ -30,14 +30,14 @@ public class Receiver {
             socket.receive(dp);
             DSPacket pkt = new DSPacket(rawBuf);
             if (pkt.getType() == DSPacket.TYPE_SOT && pkt.getSeqNum() == 0) {
-                System.out.println("[RCV] SOT SEQ=0");
+                System.out.println("[RCV] SOT SEQ= 0");
                 ackCount++;
                 if (!ChaosEngine.shouldDrop(ackCount, rn)) {
-                    //sendACK
-                    sendAck(socket, senderAddy, rcvDataPort, senderAckPort, ackCount, rn);
-                    System.out.println("[ACK] Sent ACK SEQ=0 (SOT)");
+                    // send ACK
+                    sendAck(socket, senderAddy, senderAckPort, 0, ackCount, rn);
+                    System.out.println("[ACK] Sent ACK SEQ= 0 (SOT)");
                 } else {
-                    System.out.println("[DROP] ACK SEQ=0 (SOT) intentionally dropped (ackCount=" + ackCount + ")");
+                    System.out.println("[DROP] ACK SEQ= 0 (SOT) intentionally dropped (ackCount=" + ackCount + ")");
                 }
                 break; //handshake done
             }
@@ -58,7 +58,7 @@ public class Receiver {
             byte type = pkt.getType();
             int seq = pkt.getSeqNum();
 
-            if (type == DSPacket.TYPE_EOT) {
+            if (type == DSPacket.TYPE_DATA) {
                 System.out.println("[RCV] DATA Seq= " + seq + "len= " + pkt.getLength() + "Expect Seq= " + expectedSeq + ")");
                 if (seq == expectedSeq) {
                     buffer[seq] = pkt.getPayload();
