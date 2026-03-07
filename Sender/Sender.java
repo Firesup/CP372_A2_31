@@ -97,11 +97,11 @@ public class Sender {
                     eotTimeouts++;
                     if (eotTimeouts >= MAX_TIMEOUTS) critFailure(socket);
                     System.out.println("[TIMEOUT] EOT timeout #" + eotTimeouts + " Retransmitting EOT");
-                    sendPacket(socket, eotPacket, rcvAddress, senderAckPort);
+                    sendPacket(socket, eotPacket, rcvAddress, rcvDataPort);
                 }
             }
             long endTime = System.currentTimeMillis();
-            double timeElapsed = (endTime - startTime) / 1000;
+            double timeElapsed = (endTime - startTime) / 1000.0;
             System.out.printf("Total Transmission Time: %.2f seconds%n", timeElapsed);
             socket.close();
         }

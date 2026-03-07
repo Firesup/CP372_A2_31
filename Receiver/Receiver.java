@@ -90,6 +90,11 @@ public class Receiver {
 
                 }
 
+            } else  if (type == DSPacket.TYPE_EOT) {
+                System.out.println("[RCV] EOT Seq= " + seq);
+                ackCount++;
+                sendAck(socket, senderAddy, senderAckPort, seq, ackCount, rn);
+                done = true;
             } else {
                 System.out.println("[IGNORE] Unexpected type= " + type + " Seq= " + seq);
             }
